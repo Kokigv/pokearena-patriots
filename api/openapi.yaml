@@ -1,0 +1,432 @@
+openapi: 3.1.0
+info:
+  title: PokéArena API
+  version: 0.1.0
+  description: |
+    Contrato de la API de PokéArena (RNF-API-01: se escribe y revisa antes del código).
+    Sprint 1: identidad de prueba, Crear carta (US 119), Buscar carta (US 120) y Crear ubicación (US 122).
+
+    **Errores.** Todas las respuestas de error usan `application/problem+json` (RFC 9457) con
+    tipos propios del dominio: `unauthenticated` y `token-expired` (401), `forbidden` (403),
+    `not-found` (404), `request-in-progress` (409), `validation-error`, `ability-not-found` e
+    `idempotency-key-reused` (422).
+
+    **Idempotencia.** Las operaciones de creación exigen el encabezado `Idempotency-Key`
+    (un UUID generado por el cliente). Reenviar la misma solicitud con la misma llave devuelve la
+    respuesta original con `Idempotent-Replayed: true` y no crea otro registro.
+servers:
+  - url: http://localhost:8080
+    description: Docker Compose (Nginx + 2 instancias)
+security:
+  - bearerAuth: []
+tags:
+  - name: Identidad
+  - name: Desarrollo (no existe en producción)
+  - name: Catálogo
+  - name: Imágenes
+
+paths:
+  /v1/dev/tokens:
+    post:
+      tags: [Desarrollo (no existe en producción)]
+      summary: Crear una sesión de usuario de prueba
+      description: |
+        Solo existe con `APP_ENV` distinto de `production` (RNF-SEG-10). El rol de administrador
+        se asigna por configuración (`ADMIN_SUBJECTS`), no en este endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject]
+              properties:
+                subject: { type: string, minLength: 1, maxLength: 64, example: admin-1 }
+      responses:
+        "201":
+          description: Credencial de acceso emitida por PokéArena
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Token" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/me:
+    get:
+      tags: [Identidad]
+      summary: Identidad y roles de quien llama
+      responses:
+        "200":
+          description: Identidad
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subject, roles]
+                properties:
+                  subject: { type: string }
+                  roles: { type: array, items: { type: string, enum: [player, admin] } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  /v1/abilities:
+    get:
+      tags: [Catálogo]
+      summary: Habilidades disponibles para asignar a cartas
+      description: Incluye siempre `HAB-000` Sin Habilidad.
+      responses:
+        "200":
+          description: Lista de habilidades
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Ability" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /v1/cards:
+    post:
+      tags: [Catálogo]
+      summary: Crear carta (US 119)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, cost, power, type, rarity, ability_code, image]
+              properties:
+                name: { type: string, maxLength: 60, example: Charmander }
+                cost: { type: integer, minimum: 0, maximum: 10 }
+                power: { type: integer, minimum: -20, maximum: 20 }
+                type: { $ref: "#/components/schemas/CardType" }
+                rarity: { $ref: "#/components/schemas/Rarity" }
+                ability_code: { type: string, example: HAB-000 }
+                image:
+                  type: string
+                  format: binary
+                  description: PNG, JPG o WebP; máximo 5 MB; proporción 5:7; mínimo 600 × 840 px.
+      responses:
+        "201":
+          description: Carta creada. El código PKA-<TIPO>-<NNN> lo asigna el sistema.
+          headers:
+            Location: { schema: { type: string }, example: /v1/cards/PKA-FUE-001 }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Card" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/InProgress" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    get:
+      tags: [Catálogo]
+      summary: Buscar carta (US 120)
+      description: |
+        Todos los criterios son opcionales y se combinan con Y. Costo y poder aceptan un valor
+        exacto o un rango. La paginación es por cursor: el orden (por código) es estable y no
+        repite ni omite cartas aunque se creen cartas nuevas mientras se recorre.
+      parameters:
+        - { name: code, in: query, schema: { type: string }, description: Código o prefijo (PKA-FUE) }
+        - { name: name, in: query, schema: { type: string }, description: Parcial, sin mayúsculas ni tildes }
+        - { name: cost, in: query, schema: { type: integer, minimum: 0, maximum: 10 } }
+        - { name: cost_min, in: query, schema: { type: integer, minimum: 0, maximum: 10 } }
+        - { name: cost_max, in: query, schema: { type: integer, minimum: 0, maximum: 10 } }
+        - { name: power, in: query, schema: { type: integer, minimum: -20, maximum: 20 } }
+        - { name: power_min, in: query, schema: { type: integer, minimum: -20, maximum: 20 } }
+        - { name: power_max, in: query, schema: { type: integer, minimum: -20, maximum: 20 } }
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/CardType" } }
+        - { name: rarity, in: query, schema: { $ref: "#/components/schemas/Rarity" } }
+        - { name: ability_code, in: query, schema: { type: string } }
+        - { name: trigger, in: query, schema: { $ref: "#/components/schemas/Trigger" } }
+        - { name: effect, in: query, schema: { $ref: "#/components/schemas/EffectKind" } }
+        - { name: cursor, in: query, schema: { type: string }, description: Valor de next_cursor }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Página de resultados (lista vacía si nada coincide)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Card" } }
+                  next_cursor: { type: [string, "null"] }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/cards/{code}:
+    get:
+      tags: [Catálogo]
+      summary: Ficha de una carta (incluye el estado de su imagen)
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Carta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Card" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/cards/{code}/image/retry:
+    post:
+      tags: [Catálogo]
+      summary: Reintentar la versión pequeña de la imagen de una carta
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Carta con el nuevo estado de imagen
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Card" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/locations:
+    post:
+      tags: [Catálogo]
+      summary: Crear ubicación (US 122)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, description, card_limit, extra_energy_mode, extra_energy_amount, image]
+              properties:
+                name: { type: string, maxLength: 60 }
+                description: { type: string, maxLength: 500 }
+                card_limit: { type: integer, minimum: 0, maximum: 5, description: "0 = no se pueden jugar cartas" }
+                extra_energy_mode: { type: string, enum: [FIJA, POR_CARTA] }
+                extra_energy_amount:
+                  type: integer
+                  description: FIJA 0 a 3 por turno; POR_CARTA 0 a 2 por cada carta propia en la ubicación.
+                effect_type: { $ref: "#/components/schemas/LocationEffectType" }
+                effect_params:
+                  type: string
+                  description: |
+                    JSON según el tipo de efecto:
+                    BONIFICACION_POR_TIPO `{"card_type":"AGUA","amount":2}` (amount -5 a 5);
+                    MODIFICADOR_DE_COSTO `{"amount":-1,"card_type":"FUEGO"}` (card_type opcional);
+                    RESTRICCION_POR_TURNO `{"turns":[1,2]}` (turnos 1 a 6); NINGUNO `{}`.
+                image:
+                  type: string
+                  format: binary
+                  description: PNG, JPG o WebP; máximo 5 MB; proporción 4:3; mínimo 800 × 600 px.
+      responses:
+        "201":
+          description: Ubicación creada
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Location" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/InProgress" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/locations/{location_id}:
+    get:
+      tags: [Catálogo]
+      summary: Ver una ubicación
+      parameters:
+        - { name: location_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Ubicación
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Location" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/locations/{location_id}/image/retry:
+    post:
+      tags: [Catálogo]
+      summary: Reintentar la versión pequeña de la imagen de una ubicación
+      parameters:
+        - { name: location_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Ubicación con el nuevo estado de imagen
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Location" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/images/{key}:
+    get:
+      tags: [Imágenes]
+      summary: Descargar una imagen (versión grande o pequeña)
+      security: []
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Imagen
+          content:
+            image/*: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, maxLength: 100 }
+      description: UUID generado por el cliente; el mismo en cada reintento de la misma solicitud.
+
+  responses:
+    Unauthenticated:
+      description: No autenticado o credencial expirada (`unauthenticated` / `token-expired`)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Forbidden:
+      description: Autenticado pero sin el rol requerido (`forbidden`)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: Recurso inexistente (`not-found`)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    InProgress:
+      description: Otra solicitud con la misma llave se está procesando (`request-in-progress`)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ValidationError:
+      description: Datos inválidos; `errors` indica cada campo y el requisito incumplido
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type: { type: string, example: https://pokearena.dev/errors/validation-error }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, reason]
+            properties:
+              field: { type: string, example: cost }
+              reason: { type: string, example: debe estar entre 0 y 10 }
+
+    Token:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, example: 900 }
+
+    CardType:
+      type: string
+      enum: [FUEGO, AGUA, PLANTA, ELECTRICO, PSIQUICO, LUCHA]
+    Rarity:
+      type: string
+      enum: [COMUN, POCO_COMUN, RARA, LEGENDARIA]
+    Trigger:
+      type: string
+      enum: [AL_REVELARSE, CONTINUO, NINGUNO]
+    EffectKind:
+      type: string
+      enum: [SIN_EFECTO, MODIFICAR_PODER, MODIFICAR_COSTO, GANAR_ENERGIA, MOVER, DESTRUIR, DESCARTAR, EVOLUCIONAR]
+    LocationEffectType:
+      type: string
+      enum: [NINGUNO, BONIFICACION_POR_TIPO, MODIFICADOR_DE_COSTO, RESTRICCION_POR_TURNO]
+      default: NINGUNO
+    ImageStatus:
+      type: string
+      enum: [PENDING, READY, FAILED]
+
+    Image:
+      type: object
+      required: [status, url, small_url]
+      properties:
+        status: { $ref: "#/components/schemas/ImageStatus" }
+        url: { type: string, example: /v1/images/cards/3f2a.png }
+        small_url: { type: [string, "null"], example: /v1/images/cards/3f2a_small.webp }
+
+    Ability:
+      type: object
+      required: [code, name, trigger, effect, params]
+      properties:
+        code: { type: string, example: HAB-000 }
+        name: { type: string, example: Sin Habilidad }
+        trigger: { $ref: "#/components/schemas/Trigger" }
+        effect: { $ref: "#/components/schemas/EffectKind" }
+        target: { type: [string, "null"] }
+        affected_type:
+          type: [string, "null"]
+          description: Tipo de carta al que afecta; null significa Todos.
+        condition: { type: object }
+        params: { type: object }
+        evolution_target: { type: [string, "null"] }
+
+    Card:
+      type: object
+      required: [code, name, cost, power, type, rarity, ability, image, available_to_players, created_at]
+      properties:
+        code: { type: string, example: PKA-FUE-001 }
+        name: { type: string }
+        cost: { type: integer }
+        power: { type: integer }
+        type: { $ref: "#/components/schemas/CardType" }
+        rarity: { $ref: "#/components/schemas/Rarity" }
+        ability: { $ref: "#/components/schemas/Ability" }
+        image: { $ref: "#/components/schemas/Image" }
+        available_to_players:
+          type: boolean
+          description: true solo cuando existen la versión grande y la pequeña.
+        created_at: { type: string, format: date-time }
+
+    Location:
+      type: object
+      required: [id, name, description, card_limit, extra_energy, effect, image, assignable_to_matches, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        card_limit: { type: integer }
+        extra_energy:
+          type: object
+          properties:
+            mode: { type: string, enum: [FIJA, POR_CARTA] }
+            amount: { type: integer }
+        effect:
+          type: object
+          properties:
+            type: { $ref: "#/components/schemas/LocationEffectType" }
+            params: { type: object }
+        image: { $ref: "#/components/schemas/Image" }
+        assignable_to_matches: { type: boolean }
+        created_at: { type: string, format: date-time }

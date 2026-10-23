@@ -2,6 +2,22 @@
 root_package = pokearena
 include_external_packages = True
 
+[importlinter:contract:domain-is-pure]
+name = El dominio no depende de frameworks ni de infraestructura (RNF-ARQ-01)
+type = forbidden
+source_modules =
+    pokearena.catalog.domain
+    pokearena.identity.domain
+forbidden_modules =
+    fastapi
+    starlette
+    sqlalchemy
+    redis
+    boto3
+    PIL
+    jwt
+    pokearena.shared.db
+
 [importlinter:contract:identity-layers]
 name = Capas hexagonales del módulo Identidad
 type = layers

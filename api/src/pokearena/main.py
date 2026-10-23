@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from pokearena.identity.api.router import dev_router, me_router
 from pokearena.shared import http
 from pokearena.shared.config import Settings, get_settings
 
@@ -25,6 +26,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         expose_headers=["Location", "X-Correlation-Id", "Idempotent-Replayed"],
     )
     http.install(app)
+    app.include_router(me_router)
+    # RNF-SEG-10: el mecanismo de usuarios de prueba no existe en producción.
+    if not settings.is_production:
+        app.include_router(dev_router)
 
     @app.get("/health", tags=["Operación"])
     def health() -> dict[str, str]:

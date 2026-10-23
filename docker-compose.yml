@@ -1,4 +1,6 @@
-# Servicios de PokéArena. La API y la web se agregan en los siguientes commits.
+# Levanta todo PokéArena con un solo comando (RNF-INF-01):
+#   docker compose up --build
+# API (Swagger): http://localhost:8000/docs (la web se agrega en un commit posterior)
 name: pokearena
 
 x-api-env: &api-env
@@ -35,6 +37,23 @@ services:
       interval: 3s
       retries: 20
 
+  migrate:
+    build: ./api
+    command: alembic upgrade head
+    environment: *api-env
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  api:
+    build: ./api
+    environment: *api-env
+    deploy:
+      replicas: 2
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    volumes: [images:/data/images]
+
   # Pruebas automáticas dentro de Docker, sin instalar Python en la máquina:
   #   docker compose run --rm tests
   # Usan la base pokearena_test (se crea sola si no existe) y la borran en cada corrida.
@@ -60,4 +79,5 @@ services:
 
 volumes:
   pgdata:
+  images:
   pip-cache:

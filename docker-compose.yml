@@ -53,7 +53,7 @@ services:
       - >-
         python scripts/create_test_db.py &&
         pip install -q --disable-pip-version-check -e ".[dev]" &&
-        ruff format --check . && ruff check . && mypy && pytest -q
+        ruff format --check . && ruff check . && mypy && lint-imports && pytest -q
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

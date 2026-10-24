@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { session } from "./api";
+import { CardForm } from "./components/CardForm";
 import { Login } from "./components/Login";
 
-const TABS = { card: "Inicio" } as const;
+const TABS = { card: "Crear carta" } as const;
 type Tab = keyof typeof TABS;
 
 export function App() {
@@ -39,11 +40,7 @@ export function App() {
           </button>
         </span>
       </header>
-      <main>
-        {tab === "card" && (
-          <p>Sesión iniciada. Las pantallas del catálogo se agregan en los siguientes commits.</p>
-        )}
-      </main>
+      <main>{tab === "card" && <CardForm />}</main>
     </div>
   );
 }

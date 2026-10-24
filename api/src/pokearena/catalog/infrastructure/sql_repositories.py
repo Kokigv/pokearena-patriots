@@ -1,5 +1,6 @@
 """Adaptadores de PostgreSQL para los repositorios del catálogo."""
 
+import uuid
 from typing import Any
 
 from sqlalchemy import Row, select, update
@@ -11,10 +12,17 @@ from pokearena.catalog.application.ports import DuplicateRequest, StoredImages
 from pokearena.catalog.domain.ability import Ability
 from pokearena.catalog.domain.card import Card, CardDraft, card_code
 from pokearena.catalog.domain.enums import CardType, EffectKind, ImageStatus, Rarity, Trigger
+from pokearena.catalog.domain.location import (
+    EffectType,
+    ExtraEnergyMode,
+    Location,
+    LocationDraft,
+)
 from pokearena.catalog.infrastructure.tables import (
     abilities,
     card_code_counters,
     cards,
+    locations,
 )
 
 
@@ -41,6 +49,23 @@ def _card(row: Row[Any]) -> Card:
         type=CardType(row.type),
         rarity=Rarity(row.rarity),
         ability_code=row.ability_code,
+        image_key=row.image_key,
+        thumb_key=row.thumb_key,
+        image_status=ImageStatus(row.image_status),
+        created_at=row.created_at,
+    )
+
+
+def _location(row: Row[Any]) -> Location:
+    return Location(
+        id=str(row.id),
+        name=row.name,
+        description=row.description,
+        card_limit=row.card_limit,
+        extra_energy_mode=ExtraEnergyMode(row.extra_energy_mode),
+        extra_energy_amount=row.extra_energy_amount,
+        effect_type=EffectType(row.effect_type),
+        effect_params=row.effect_params or {},
         image_key=row.image_key,
         thumb_key=row.thumb_key,
         image_status=ImageStatus(row.image_status),
@@ -135,3 +160,64 @@ class SqlCardRepository:
         ).one()
         self._session.commit()
         return _card(row)
+
+
+class SqlLocationRepository:
+    def __init__(self, session: Session, created_by: str | None = None) -> None:
+        self._session = session
+        self._created_by = created_by
+
+    def find_by_idempotency_key(self, key: str) -> Location | None:
+        stmt = select(locations).where(locations.c.idempotency_key == key)
+        row = self._session.execute(stmt).first()
+        return _location(row) if row else None
+
+    def get(self, location_id: str) -> Location | None:
+        try:
+            uuid.UUID(location_id)
+        except ValueError:
+            return None
+        stmt = select(locations).where(locations.c.id == location_id)
+        row = self._session.execute(stmt).first()
+        return _location(row) if row else None
+
+    def add(self, draft: LocationDraft, images: StoredImages, idempotency_key: str) -> Location:
+        try:
+            row = self._session.execute(
+                insert(locations)
+                .values(
+                    id=str(uuid.uuid4()),
+                    name=draft.name,
+                    description=draft.description,
+                    card_limit=draft.card_limit,
+                    extra_energy_mode=draft.extra_energy_mode.value,
+                    extra_energy_amount=draft.extra_energy_amount,
+                    effect_type=draft.effect_type.value,
+                    effect_params=draft.effect_params,
+                    image_key=images.image_key,
+                    thumb_key=images.thumb_key,
+                    image_status=images.status.value,
+                    idempotency_key=idempotency_key,
+                    created_by=self._created_by,
+                )
+                .returning(*locations.c)
+            ).one()
+            self._session.commit()
+        except IntegrityError as exc:
+            self._session.rollback()
+            if "idempotency_key" in str(exc.orig):
+                raise DuplicateRequest() from exc
+            raise
+        return _location(row)
+
+    def update_thumbnail(
+        self, location_id: str, thumb_key: str | None, status: ImageStatus
+    ) -> Location:
+        row = self._session.execute(
+            update(locations)
+            .where(locations.c.id == location_id)
+            .values(thumb_key=thumb_key, image_status=status.value)
+            .returning(*locations.c)
+        ).one()
+        self._session.commit()
+        return _location(row)

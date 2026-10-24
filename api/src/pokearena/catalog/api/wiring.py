@@ -8,6 +8,10 @@ from redis import Redis
 from sqlalchemy.orm import Session
 
 from pokearena.catalog.application.create_card import CreateCard, RetryCardThumbnail
+from pokearena.catalog.application.create_location import (
+    CreateLocation,
+    RetryLocationThumbnail,
+)
 from pokearena.catalog.application.images import ImageService
 from pokearena.catalog.application.ports import ImageStorage
 from pokearena.catalog.application.search_cards import ListAbilities
@@ -15,6 +19,7 @@ from pokearena.catalog.infrastructure.pillow_images import PillowImageProcessor
 from pokearena.catalog.infrastructure.sql_repositories import (
     SqlAbilityRepository,
     SqlCardRepository,
+    SqlLocationRepository,
 )
 from pokearena.catalog.infrastructure.storage import LocalImageStorage, S3ImageStorage
 from pokearena.identity.api.dependencies import require_admin
@@ -82,3 +87,25 @@ def ability_repository(
 
 def list_abilities_uc(repo: SqlAbilityRepository = Depends(ability_repository)) -> ListAbilities:
     return ListAbilities(repo)
+
+
+def create_location_uc(
+    session: Session = Depends(get_session),
+    admin: Principal = Depends(require_admin),
+    images: ImageService = Depends(get_image_service),
+) -> CreateLocation:
+    return CreateLocation(SqlLocationRepository(session, admin.subject), images)
+
+
+def retry_location_thumbnail_uc(
+    session: Session = Depends(get_session),
+    _: Principal = Depends(require_admin),
+    images: ImageService = Depends(get_image_service),
+) -> RetryLocationThumbnail:
+    return RetryLocationThumbnail(SqlLocationRepository(session), images)
+
+
+def location_repository(
+    session: Session = Depends(get_session), _: Principal = Depends(require_admin)
+) -> SqlLocationRepository:
+    return SqlLocationRepository(session)

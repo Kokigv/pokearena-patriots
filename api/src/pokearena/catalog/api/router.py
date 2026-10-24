@@ -1,15 +1,15 @@
-"""Rutas HTTP del catálogo: Crear carta y Crear ubicación."""
+"""Rutas HTTP del catálogo: Crear carta, Buscar carta y Crear ubicación."""
 
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Header, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
 
 from pokearena.catalog.api import wiring
 from pokearena.catalog.api.idempotent import require_key, run_idempotent
-from pokearena.catalog.api.schemas import AbilityOut, CardOut, LocationOut
+from pokearena.catalog.api.schemas import AbilityOut, CardOut, CardPageOut, LocationOut
 from pokearena.catalog.application.create_card import (
     CreateCard,
     CreateCardCommand,
@@ -21,10 +21,11 @@ from pokearena.catalog.application.create_location import (
     RetryLocationThumbnail,
 )
 from pokearena.catalog.application.ports import ImageStorage
-from pokearena.catalog.application.search_cards import ListAbilities
+from pokearena.catalog.application.search_cards import ListAbilities, SearchCards
 from pokearena.catalog.domain.card import CardDraft
 from pokearena.catalog.domain.images import MAX_BYTES
 from pokearena.catalog.domain.location import LocationDraft
+from pokearena.catalog.domain.search import parse_criteria
 from pokearena.catalog.infrastructure.sql_repositories import (
     SqlAbilityRepository,
     SqlCardRepository,
@@ -91,6 +92,51 @@ def create_card(
         return 201, body, {"Location": f"/v1/cards/{card.code}"}
 
     return run_idempotent(store, "cards", key, fp, action)
+
+
+@router.get("/cards", response_model=CardPageOut, summary="Buscar carta")
+def search_cards(
+    code: str | None = Query(None, description="Código o prefijo, p. ej. PKA-FUE"),
+    name: str | None = Query(None, description="Coincidencia parcial sin mayúsculas ni tildes"),
+    cost: int | None = None,
+    cost_min: int | None = None,
+    cost_max: int | None = None,
+    power: int | None = None,
+    power_min: int | None = None,
+    power_max: int | None = None,
+    type: str | None = None,
+    rarity: str | None = None,
+    ability_code: str | None = None,
+    trigger: str | None = None,
+    effect: str | None = None,
+    cursor: str | None = None,
+    limit: int | None = Query(None, description="1 a 100; por defecto 50"),
+    use_case: SearchCards = Depends(wiring.search_cards_uc),
+    abilities: SqlAbilityRepository = Depends(wiring.ability_repository),
+) -> CardPageOut:
+    criteria = parse_criteria(
+        code=code,
+        name=name,
+        cost=cost,
+        cost_min=cost_min,
+        cost_max=cost_max,
+        power=power,
+        power_min=power_min,
+        power_max=power_max,
+        type=type,
+        rarity=rarity,
+        ability_code=ability_code,
+        trigger=trigger,
+        effect=effect,
+        cursor=cursor,
+        limit=limit,
+    )
+    page = use_case.execute(criteria)
+    by_code = {a.code: a for a in abilities.list_all()}
+    return CardPageOut(
+        items=[CardOut.of(c, by_code.get(c.ability_code)) for c in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get("/cards/{code}", response_model=CardOut, summary="Ficha de una carta")

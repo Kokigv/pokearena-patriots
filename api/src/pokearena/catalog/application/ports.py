@@ -8,6 +8,7 @@ from pokearena.catalog.domain.card import Card, CardDraft
 from pokearena.catalog.domain.enums import ImageStatus
 from pokearena.catalog.domain.images import ImageInfo
 from pokearena.catalog.domain.location import Location, LocationDraft
+from pokearena.catalog.domain.search import SearchCriteria
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,10 @@ class CardRepository(Protocol):
     def get(self, code: str) -> Card | None: ...
 
     def update_thumbnail(self, code: str, thumb_key: str | None, status: ImageStatus) -> Card: ...
+
+    def search(self, criteria: SearchCriteria) -> list[Card]:
+        """Devuelve hasta ``criteria.limit + 1`` cartas ordenadas por código."""
+        ...
 
 
 class LocationRepository(Protocol):

@@ -3,14 +3,14 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import Row, select, update
+from sqlalchemy import ColumnElement, Row, and_, func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from pokearena.catalog.application.ports import DuplicateRequest, StoredImages
 from pokearena.catalog.domain.ability import Ability
-from pokearena.catalog.domain.card import Card, CardDraft, card_code
+from pokearena.catalog.domain.card import Card, CardDraft, card_code, parse_card_code
 from pokearena.catalog.domain.enums import CardType, EffectKind, ImageStatus, Rarity, Trigger
 from pokearena.catalog.domain.location import (
     EffectType,
@@ -18,6 +18,7 @@ from pokearena.catalog.domain.location import (
     Location,
     LocationDraft,
 )
+from pokearena.catalog.domain.search import SearchCriteria
 from pokearena.catalog.infrastructure.tables import (
     abilities,
     card_code_counters,
@@ -160,6 +161,50 @@ class SqlCardRepository:
         ).one()
         self._session.commit()
         return _card(row)
+
+    def search(self, criteria: SearchCriteria) -> list[Card]:
+        conditions: list[ColumnElement[bool]] = []
+        if criteria.code:
+            conditions.append(cards.c.code.ilike(_escape_like(criteria.code) + "%"))
+        if criteria.name:
+            pattern = "%" + _escape_like(criteria.name) + "%"
+            conditions.append(
+                func.f_unaccent(func.lower(cards.c.name)).like(func.f_unaccent(func.lower(pattern)))
+            )
+        for column, rng in ((cards.c.cost, criteria.cost), (cards.c.power, criteria.power)):
+            if rng is not None and rng.low is not None:
+                conditions.append(column >= rng.low)
+            if rng is not None and rng.high is not None:
+                conditions.append(column <= rng.high)
+        if criteria.type:
+            conditions.append(cards.c.type == criteria.type.value)
+        if criteria.rarity:
+            conditions.append(cards.c.rarity == criteria.rarity.value)
+        if criteria.ability_code:
+            conditions.append(cards.c.ability_code == criteria.ability_code.upper())
+        if criteria.trigger or criteria.effect:
+            ability_filter = []
+            if criteria.trigger:
+                ability_filter.append(abilities.c.trigger == criteria.trigger.value)
+            if criteria.effect:
+                ability_filter.append(abilities.c.effect == criteria.effect.value)
+            conditions.append(
+                cards.c.ability_code.in_(select(abilities.c.code).where(and_(*ability_filter)))
+            )
+        # Orden estable por (tipo, consecutivo): PKA-AGU-999 va antes que PKA-AGU-1000, cosa
+        # que el orden alfabético del código no garantiza. El cursor es la última carta vista.
+        if criteria.after_code:
+            parsed = parse_card_code(criteria.after_code)
+            assert parsed is not None
+            after_type, after_seq = parsed
+            conditions.append(tuple_(cards.c.type, cards.c.seq) > (after_type.value, after_seq))
+        stmt = (
+            select(cards)
+            .where(*conditions)
+            .order_by(cards.c.type, cards.c.seq)
+            .limit(criteria.limit + 1)
+        )
+        return [_card(r) for r in self._session.execute(stmt).all()]
 
 
 class SqlLocationRepository:

@@ -1,6 +1,6 @@
 # Levanta todo PokéArena con un solo comando (RNF-INF-01):
 #   docker compose up --build
-# API (Swagger): http://localhost:8000/docs (la web se agrega en un commit posterior)
+# Web: http://localhost:8080   ·   API (Swagger): http://localhost:8080/docs
 name: pokearena
 
 x-api-env: &api-env
@@ -53,6 +53,11 @@ services:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
     volumes: [images:/data/images]
+
+  web:
+    build: ./web
+    ports: ["8080:80"]
+    depends_on: [api]
 
   # Pruebas automáticas dentro de Docker, sin instalar Python en la máquina:
   #   docker compose run --rm tests

@@ -5,6 +5,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from pokearena.catalog.api.router import images_router
+from pokearena.catalog.api.router import router as catalog_router
 from pokearena.identity.api.router import dev_router, me_router
 from pokearena.shared import http
 from pokearena.shared.config import Settings, get_settings
@@ -27,6 +29,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     http.install(app)
     app.include_router(me_router)
+    app.include_router(catalog_router)
+    app.include_router(images_router)
     # RNF-SEG-10: el mecanismo de usuarios de prueba no existe en producción.
     if not settings.is_production:
         app.include_router(dev_router)

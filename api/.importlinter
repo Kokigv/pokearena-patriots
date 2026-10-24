@@ -1,0 +1,55 @@
+[importlinter]
+root_package = pokearena
+include_external_packages = True
+
+[importlinter:contract:domain-is-pure]
+name = El dominio no depende de frameworks ni de infraestructura (RNF-ARQ-01)
+type = forbidden
+source_modules =
+    pokearena.catalog.domain
+    pokearena.identity.domain
+forbidden_modules =
+    fastapi
+    starlette
+    sqlalchemy
+    redis
+    boto3
+    PIL
+    jwt
+    pokearena.shared.db
+
+[importlinter:contract:catalog-layers]
+name = Capas hexagonales del módulo Catálogo
+type = layers
+layers =
+    pokearena.catalog.api
+    pokearena.catalog.infrastructure
+    pokearena.catalog.application
+    pokearena.catalog.domain
+
+[importlinter:contract:identity-layers]
+name = Capas hexagonales del módulo Identidad
+type = layers
+layers =
+    pokearena.identity.api
+    pokearena.identity.infrastructure
+    pokearena.identity.application
+    pokearena.identity.domain
+
+[importlinter:contract:module-boundaries]
+name = Catálogo solo usa Identidad a través de su API pública (RNF-ARQ-03)
+type = forbidden
+source_modules =
+    pokearena.catalog.domain
+    pokearena.catalog.application
+    pokearena.catalog.infrastructure
+forbidden_modules =
+    pokearena.identity
+
+[importlinter:contract:identity-independent]
+name = Identidad no depende de Catálogo
+type = forbidden
+source_modules =
+    pokearena.identity
+forbidden_modules =
+    pokearena.catalog

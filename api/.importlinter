@@ -18,6 +18,15 @@ forbidden_modules =
     jwt
     pokearena.shared.db
 
+[importlinter:contract:catalog-layers]
+name = Capas hexagonales del módulo Catálogo
+type = layers
+layers =
+    pokearena.catalog.api
+    pokearena.catalog.infrastructure
+    pokearena.catalog.application
+    pokearena.catalog.domain
+
 [importlinter:contract:identity-layers]
 name = Capas hexagonales del módulo Identidad
 type = layers
@@ -26,6 +35,16 @@ layers =
     pokearena.identity.infrastructure
     pokearena.identity.application
     pokearena.identity.domain
+
+[importlinter:contract:module-boundaries]
+name = Catálogo solo usa Identidad a través de su API pública (RNF-ARQ-03)
+type = forbidden
+source_modules =
+    pokearena.catalog.domain
+    pokearena.catalog.application
+    pokearena.catalog.infrastructure
+forbidden_modules =
+    pokearena.identity
 
 [importlinter:contract:identity-independent]
 name = Identidad no depende de Catálogo

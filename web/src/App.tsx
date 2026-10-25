@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { session } from "./api";
 import { CardForm } from "./components/CardForm";
+import { CardSearch } from "./components/CardSearch";
 import { LocationForm } from "./components/LocationForm";
 import { Login } from "./components/Login";
 
-const TABS = { card: "Crear carta", location: "Crear ubicación" } as const;
+const TABS = { card: "Crear carta", location: "Crear ubicación", search: "Buscar cartas" } as const;
 type Tab = keyof typeof TABS;
 
 export function App() {
@@ -44,6 +45,7 @@ export function App() {
       <main>
         {tab === "card" && <CardForm />}
         {tab === "location" && <LocationForm />}
+        {tab === "search" && <CardSearch />}
       </main>
     </div>
   );

@@ -14,7 +14,7 @@ from pokearena.catalog.application.create_location import (
 )
 from pokearena.catalog.application.images import ImageService
 from pokearena.catalog.application.ports import ImageStorage
-from pokearena.catalog.application.search_cards import ListAbilities
+from pokearena.catalog.application.search_cards import ListAbilities, SearchCards
 from pokearena.catalog.infrastructure.pillow_images import PillowImageProcessor
 from pokearena.catalog.infrastructure.sql_repositories import (
     SqlAbilityRepository,
@@ -71,6 +71,12 @@ def retry_card_thumbnail_uc(
     images: ImageService = Depends(get_image_service),
 ) -> RetryCardThumbnail:
     return RetryCardThumbnail(SqlCardRepository(session), images)
+
+
+def search_cards_uc(
+    session: Session = Depends(get_session), _: Principal = Depends(require_admin)
+) -> SearchCards:
+    return SearchCards(SqlCardRepository(session))
 
 
 def card_repository(

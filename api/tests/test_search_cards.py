@@ -6,42 +6,7 @@ from sqlalchemy import text
 
 from pokearena.shared.db import get_engine
 from tests.conftest import insert_ability
-
-ABBR = {
-    "FUEGO": "FUE",
-    "AGUA": "AGU",
-    "PLANTA": "PLA",
-    "ELECTRICO": "ELE",
-    "PSIQUICO": "PSI",
-    "LUCHA": "LUC",
-}
-
-
-def seed(cards: list[dict[str, object]]) -> None:
-    """Inserta cartas directo en la base para preparar escenarios de búsqueda."""
-    with get_engine().begin() as conn:
-        for card in cards:
-            seq = conn.execute(
-                text(
-                    "UPDATE card_code_counters SET last_value = last_value + 1 "
-                    "WHERE card_type = :t RETURNING last_value"
-                ),
-                {"t": card["type"]},
-            ).scalar_one()
-            conn.execute(
-                text(
-                    "INSERT INTO cards (code, seq, name, cost, power, type, rarity, "
-                    "ability_code, image_key, thumb_key, image_status) VALUES (:code, :seq, "
-                    ":name, :cost, :power, :type, :rarity, :ability, 'x.png', 'x_small.webp', "
-                    "'READY')"
-                ),
-                {
-                    "code": f"PKA-{ABBR[str(card['type'])]}-{seq:03d}",
-                    "seq": seq,
-                    "ability": card.get("ability", "HAB-000"),
-                    **card,
-                },
-            )
+from tests.conftest import seed_cards as seed
 
 
 @pytest.fixture

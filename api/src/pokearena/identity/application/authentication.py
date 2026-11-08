@@ -1,13 +1,14 @@
 """Casos de uso de autenticación: emitir y validar credenciales propias de PokéArena.
 
-La API solo confía en credenciales que ella misma emite (RNF-SEG-01). En el Sprint 1 la
-única forma de obtener una es el emisor de desarrollo; en el Sprint 2 el inicio de sesión
-con Google usará el mismo ``TokenCodec`` sin cambiar cómo se autorizan las solicitudes.
+La API solo confía en credenciales que ella misma emite (RNF-SEG-01). El token del proveedor
+(Google) se valida una sola vez, al iniciar sesión; después todas las solicitudes se autorizan
+con el JWT de PokéArena, sin importar con qué proveedor entró el jugador.
 """
 
 from dataclasses import dataclass
 from typing import Protocol
 
+from pokearena.identity.domain.player import ExternalIdentity
 from pokearena.identity.domain.principal import Principal, Role
 from pokearena.shared.errors import Forbidden
 
@@ -19,29 +20,33 @@ class IssuedToken:
     token_type: str = "Bearer"
 
 
-class TokenCodec(Protocol):
-    def issue(self, subject: str) -> IssuedToken: ...
+@dataclass(frozen=True)
+class TokenClaims:
+    subject: str
+    roles: frozenset[Role]
 
-    def subject_of(self, token: str) -> str:
-        """Devuelve el sujeto del token o lanza NotAuthenticated / TokenExpired."""
+
+class TokenCodec(Protocol):
+    def issue(self, subject: str, roles: frozenset[Role]) -> IssuedToken: ...
+
+    def decode(self, token: str) -> TokenClaims:
+        """Devuelve el sujeto y los roles del token o lanza NotAuthenticated / TokenExpired."""
         ...
 
 
 class RoleResolver(Protocol):
-    def roles_for(self, subject: str) -> frozenset[Role]: ...
+    def roles_for(self, identity: ExternalIdentity) -> frozenset[Role]: ...
 
 
 class AuthenticationService:
-    def __init__(self, codec: TokenCodec, roles: RoleResolver) -> None:
+    """Valida las credenciales de PokéArena en cada solicitud (sin ir a la base de datos)."""
+
+    def __init__(self, codec: TokenCodec) -> None:
         self._codec = codec
-        self._roles = roles
 
     def authenticate(self, token: str) -> Principal:
-        subject = self._codec.subject_of(token)
-        return Principal(subject=subject, roles=self._roles.roles_for(subject))
-
-    def issue_test_token(self, subject: str) -> IssuedToken:
-        return self._codec.issue(subject)
+        claims = self._codec.decode(token)
+        return Principal(subject=claims.subject, roles=claims.roles)
 
 
 def ensure_admin(principal: Principal) -> Principal:

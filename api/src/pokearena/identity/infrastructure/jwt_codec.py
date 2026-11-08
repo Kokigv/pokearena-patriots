@@ -5,7 +5,8 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 
-from pokearena.identity.application.authentication import IssuedToken
+from pokearena.identity.application.authentication import IssuedToken, TokenClaims
+from pokearena.identity.domain.principal import Role
 from pokearena.shared.errors import NotAuthenticated, TokenExpired
 
 _ALGORITHM = "HS256"
@@ -17,7 +18,7 @@ class JwtTokenCodec:
         self._issuer = issuer
         self._ttl = timedelta(minutes=ttl_minutes)
 
-    def issue(self, subject: str) -> IssuedToken:
+    def issue(self, subject: str, roles: frozenset[Role]) -> IssuedToken:
         now = datetime.now(UTC)
         claims = {
             "sub": subject,
@@ -25,11 +26,12 @@ class JwtTokenCodec:
             "iat": now,
             "exp": now + self._ttl,
             "jti": str(uuid.uuid4()),
+            "roles": sorted(r.value for r in roles),
         }
         token = jwt.encode(claims, self._secret, algorithm=_ALGORITHM)
         return IssuedToken(access_token=token, expires_in=int(self._ttl.total_seconds()))
 
-    def subject_of(self, token: str) -> str:
+    def decode(self, token: str) -> TokenClaims:
         try:
             claims = jwt.decode(
                 token,
@@ -42,4 +44,8 @@ class JwtTokenCodec:
             raise TokenExpired() from exc
         except jwt.InvalidTokenError as exc:
             raise NotAuthenticated("La credencial de acceso no es válida.") from exc
-        return str(claims["sub"])
+        roles = {Role.PLAYER}
+        for value in claims.get("roles", []):
+            if value in Role._value2member_map_:
+                roles.add(Role(value))
+        return TokenClaims(subject=str(claims["sub"]), roles=frozenset(roles))

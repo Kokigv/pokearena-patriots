@@ -8,6 +8,7 @@ type = forbidden
 source_modules =
     pokearena.catalog.domain
     pokearena.identity.domain
+    pokearena.collection.domain
 forbidden_modules =
     fastapi
     starlette
@@ -36,6 +37,15 @@ layers =
     pokearena.identity.application
     pokearena.identity.domain
 
+[importlinter:contract:collection-layers]
+name = Capas hexagonales del módulo Colección
+type = layers
+layers =
+    pokearena.collection.api
+    pokearena.collection.infrastructure
+    pokearena.collection.application
+    pokearena.collection.domain
+
 [importlinter:contract:module-boundaries]
 name = Catálogo solo usa Identidad a través de su API pública (RNF-ARQ-03)
 type = forbidden
@@ -45,11 +55,38 @@ source_modules =
     pokearena.catalog.infrastructure
 forbidden_modules =
     pokearena.identity
+    pokearena.collection
 
 [importlinter:contract:identity-independent]
-name = Identidad no depende de Catálogo
+name = Identidad no depende de Catálogo ni de Colección (Colección implementa su puerto)
 type = forbidden
 source_modules =
     pokearena.identity
 forbidden_modules =
     pokearena.catalog
+    pokearena.collection
+
+[importlinter:contract:collection-uses-catalog-facade]
+name = Colección usa Catálogo solo por su fachada pública (ADR-001, regla 2)
+type = forbidden
+source_modules =
+    pokearena.collection
+forbidden_modules =
+    pokearena.catalog.domain
+    pokearena.catalog.infrastructure
+    pokearena.catalog.api.router
+    pokearena.catalog.api.wiring
+    pokearena.catalog.application.create_card
+    pokearena.catalog.application.create_location
+    pokearena.catalog.application.search_cards
+    pokearena.catalog.application.ports
+allow_indirect_imports = True
+
+[importlinter:contract:collection-domain-isolated]
+name = El dominio y los casos de uso de Colección no conocen Identidad
+type = forbidden
+source_modules =
+    pokearena.collection.domain
+    pokearena.collection.application
+forbidden_modules =
+    pokearena.identity

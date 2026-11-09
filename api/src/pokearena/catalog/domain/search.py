@@ -33,6 +33,9 @@ class SearchCriteria:
     effect: EffectKind | None = None
     after_code: str | None = None  # cursor: última carta de la página anterior
     limit: int = DEFAULT_LIMIT
+    # Usados por la fachada pública del catálogo (no vienen del cliente):
+    codes: frozenset[str] | None = None  # restringe a estas cartas (p. ej. las del jugador)
+    playable_only: bool = False  # solo cartas visibles para jugadores (imagen lista)
 
 
 def encode_cursor(code: str) -> str:

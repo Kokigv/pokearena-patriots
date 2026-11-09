@@ -112,6 +112,45 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /v1/catalog:
+    get:
+      tags: [Colección]
+      summary: Explorar el catálogo y mi colección (US 124)
+      description: |
+        Catálogo paginado (cursor) de las cartas visibles para jugadores. Cada carta indica si
+        el jugador la posee y cuántas copias tiene. Los filtros por tipo y costo se combinan;
+        `owned=true` muestra solo las cartas propias. Una combinación sin resultados devuelve
+        una lista vacía. Las páginas del catálogo se guardan en caché unos segundos, así que una
+        carta recién creada puede tardar en aparecer.
+      parameters:
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/CardType" } }
+        - { name: cost, in: query, schema: { type: integer, minimum: 0, maximum: 10 } }
+        - { name: cost_min, in: query, schema: { type: integer, minimum: 0, maximum: 10 } }
+        - { name: cost_max, in: query, schema: { type: integer, minimum: 0, maximum: 10 } }
+        - { name: owned, in: query, schema: { type: boolean, default: false } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Página del catálogo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/me/collection:
+    get:
+      tags: [Colección]
+      summary: Mi colección y saldo de cubos (US 123)
+      responses:
+        "200":
+          description: Colección del jugador
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Collection" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
   /v1/abilities:
     get:
       tags: [Catálogo]

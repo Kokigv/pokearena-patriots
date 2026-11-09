@@ -1,36 +1,50 @@
-import { useState } from "react";
-import { session } from "./api";
+import { useCallback, useState } from "react";
+import { session, type Me } from "./api";
 import { CardForm } from "./components/CardForm";
 import { CardSearch } from "./components/CardSearch";
 import { LocationForm } from "./components/LocationForm";
 import { Login } from "./components/Login";
 
-const TABS = { card: "Crear carta", location: "Crear ubicación", search: "Buscar cartas" } as const;
-type Tab = keyof typeof TABS;
+const ADMIN_TABS = {
+  card: "Crear carta",
+  location: "Crear ubicación",
+  search: "Buscar cartas",
+} as const;
+type Tab = keyof typeof ADMIN_TABS;
 
 export function App() {
-  const [user, setUser] = useState<{ subject: string; roles: string[] } | null>(null);
+  const [user, setUser] = useState<Me | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("card");
 
-  if (!user) return <Login onLogin={(subject, roles) => setUser({ subject, roles })} />;
+  const onLogin = useCallback((me: Me, message: string | null) => {
+    setUser(me);
+    setNotice(message);
+  }, []);
+
+  if (!user) return <Login onLogin={onLogin} />;
+
+  const isAdmin = user.roles.includes("admin");
+  const tabs: Record<string, string> = isAdmin ? ADMIN_TABS : {};
 
   return (
     <div className="app">
       <header>
-        <strong>PokéArena · Administración</strong>
+        <strong>PokéArena</strong>
         <nav>
-          {(Object.keys(TABS) as Tab[]).map((t) => (
+          {(Object.keys(tabs) as Tab[]).map((t) => (
             <button
               key={t}
               className={t === tab ? "tab tab--active" : "tab"}
               onClick={() => setTab(t)}
             >
-              {TABS[t]}
+              {tabs[t]}
             </button>
           ))}
         </nav>
         <span className="muted">
-          {user.subject} {user.roles.includes("admin") ? "(admin)" : "(sin rol admin)"}{" "}
+          {user.player.display_name} · Elo {user.player.elo}
+          {isAdmin && " (admin)"}{" "}
           <button
             className="link"
             onClick={() => {
@@ -43,9 +57,10 @@ export function App() {
         </span>
       </header>
       <main>
-        {tab === "card" && <CardForm />}
-        {tab === "location" && <LocationForm />}
-        {tab === "search" && <CardSearch />}
+        {notice && <div className="banner banner--error">{notice}</div>}
+        {tab === "card" && isAdmin && <CardForm />}
+        {tab === "location" && isAdmin && <LocationForm />}
+        {tab === "search" && isAdmin && <CardSearch />}
       </main>
     </div>
   );

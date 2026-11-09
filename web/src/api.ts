@@ -78,6 +78,55 @@ export interface CardPage {
   next_cursor: string | null;
 }
 
+export interface Player {
+  id: string;
+  display_name: string;
+  email: string | null;
+  role: string;
+  elo: number;
+  is_test: boolean;
+}
+
+export interface Session {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  player: Player;
+  first_login: boolean;
+  onboarding: { status: "COMPLETED" | "PENDING_CATALOG" | "PENDING_RETRY"; message: string | null };
+}
+
+export interface Me {
+  subject: string;
+  roles: string[];
+  player: Player;
+}
+
+export interface CatalogCard {
+  code: string;
+  name: string;
+  cost: number;
+  power: number;
+  type: string;
+  rarity: string;
+  image_url: string;
+  ability: { code: string; name: string; trigger: string; effect: string } | null;
+  owned: boolean;
+  copies: number;
+}
+
+export interface CatalogPage {
+  items: CatalogCard[];
+  next_cursor: string | null;
+}
+
+export interface Collection {
+  initial_granted: boolean;
+  cubes: number;
+  distinct_cards: number;
+  cards: { card_code: string; copies: number }[];
+}
+
 export interface FieldError {
   field: string;
   reason: string;
@@ -124,12 +173,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const api = {
   testToken: (subject: string) =>
-    request<{ access_token: string }>("/v1/dev/tokens", {
+    request<Session>("/v1/dev/tokens", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subject }),
     }),
-  me: () => request<{ subject: string; roles: string[] }>("/v1/me"),
+  googleLogin: (idToken: string) =>
+    request<Session>("/v1/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: idToken }),
+    }),
+  me: () => request<Me>("/v1/me"),
+  catalog: (params: URLSearchParams) => request<CatalogPage>(`/v1/catalog?${params}`),
+  myCollection: () => request<Collection>("/v1/me/collection"),
   abilities: () => request<Ability[]>("/v1/abilities"),
   createCard: (form: FormData, idempotencyKey: string) =>
     request<Card>("/v1/cards", {

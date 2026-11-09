@@ -191,6 +191,10 @@ class SqlCardRepository:
             conditions.append(
                 cards.c.ability_code.in_(select(abilities.c.code).where(and_(*ability_filter)))
             )
+        if criteria.codes is not None:
+            conditions.append(cards.c.code.in_(sorted(criteria.codes)))
+        if criteria.playable_only:
+            conditions.append(cards.c.image_status == ImageStatus.READY.value)
         # Orden estable por (tipo, consecutivo): PKA-AGU-999 va antes que PKA-AGU-1000, cosa
         # que el orden alfabético del código no garantiza. El cursor es la última carta vista.
         if criteria.after_code:
@@ -205,6 +209,14 @@ class SqlCardRepository:
             .limit(criteria.limit + 1)
         )
         return [_card(r) for r in self._session.execute(stmt).all()]
+
+    def playable_codes(self, rarity: Rarity) -> list[str]:
+        stmt = (
+            select(cards.c.code)
+            .where(cards.c.rarity == rarity.value, cards.c.image_status == ImageStatus.READY.value)
+            .order_by(cards.c.type, cards.c.seq)
+        )
+        return list(self._session.execute(stmt).scalars())
 
 
 class SqlLocationRepository:

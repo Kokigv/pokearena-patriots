@@ -11,7 +11,7 @@ dependencies = [
     "alembic>=1.13",
     "redis>=5.0",
     "pillow>=10.4",
-    "pyjwt>=2.9",
+    "pyjwt[crypto]>=2.9",
     "boto3>=1.35",
     "python-multipart>=0.0.9",
 ]
@@ -52,7 +52,14 @@ ignore_missing_imports = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["pokearena.catalog.domain.*", "pokearena.catalog.application.*"]
+module = [
+    "pokearena.catalog.domain.*",
+    "pokearena.catalog.application.*",
+    "pokearena.identity.domain.*",
+    "pokearena.identity.application.*",
+    "pokearena.collection.domain.*",
+    "pokearena.collection.application.*",
+]
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]

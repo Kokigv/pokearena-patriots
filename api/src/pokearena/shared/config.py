@@ -26,6 +26,9 @@ class Settings:
     s3_secret_key: str | None = None
     idempotency_ttl_seconds: int = 86_400
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
+    google_client_id: str | None = None
+    google_jwks_url: str | None = None
+    catalog_cache_seconds: int = 30
 
     @property
     def is_production(self) -> bool:
@@ -48,6 +51,9 @@ class Settings:
             s3_access_key=env.get("S3_ACCESS_KEY") or None,
             s3_secret_key=env.get("S3_SECRET_KEY") or None,
             cors_origins=tuple(_csv(env.get("CORS_ORIGINS", "http://localhost:5173"))),
+            google_client_id=env.get("GOOGLE_CLIENT_ID") or None,
+            google_jwks_url=env.get("GOOGLE_JWKS_URL") or None,
+            catalog_cache_seconds=int(env.get("CATALOG_CACHE_SECONDS", cls.catalog_cache_seconds)),
         )
 
 

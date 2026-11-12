@@ -7,7 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pokearena.catalog.api.router import images_router
 from pokearena.catalog.api.router import router as catalog_router
-from pokearena.identity.api.router import dev_router, me_router
+from pokearena.collection.api.onboarding import onboarding_factory
+from pokearena.collection.api.router import router as collection_router
+from pokearena.identity.api.dependencies import ONBOARDING_FACTORY
+from pokearena.identity.api.router import auth_router, dev_router, me_router
 from pokearena.shared import http
 from pokearena.shared.config import Settings, get_settings
 
@@ -17,9 +20,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     app = FastAPI(
         title="PokéArena API",
-        version="0.1.0",
-        description="Sprint 1: catálogo de cartas y ubicaciones. Contrato en api/openapi.yaml.",
+        version="0.2.0",
+        description=(
+            "Sprint 2: inicio de sesión con Google, colección inicial y exploración del "
+            "catálogo. Contrato en api/openapi.yaml."
+        ),
     )
+    # Raíz de composición: Identidad expone el puerto PlayerOnboarding y Colección lo
+    # implementa (colección inicial, US 123). Así ningún módulo importa al otro al revés.
+    setattr(app.state, ONBOARDING_FACTORY, onboarding_factory)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
@@ -28,7 +37,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         expose_headers=["Location", "X-Correlation-Id", "Idempotent-Replayed"],
     )
     http.install(app)
+    app.include_router(auth_router)
     app.include_router(me_router)
+    app.include_router(collection_router)
     app.include_router(catalog_router)
     app.include_router(images_router)
     # RNF-SEG-10: el mecanismo de usuarios de prueba no existe en producción.

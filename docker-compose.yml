@@ -14,6 +14,10 @@ x-api-env: &api-env
   STORAGE_BACKEND: local
   STORAGE_LOCAL_PATH: /data/images
   CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+  # Inicio de sesión con Google (US 116): Client ID de Google Identity Services.
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  # Segundos que se guardan en Redis las páginas del catálogo (US 124, ADR de caching).
+  CATALOG_CACHE_SECONDS: ${CATALOG_CACHE_SECONDS:-30}
 
 services:
   postgres:
@@ -55,7 +59,10 @@ services:
     volumes: [images:/data/images]
 
   web:
-    build: ./web
+    build:
+      context: ./web
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     ports: ["8080:80"]
     depends_on: [api]
 

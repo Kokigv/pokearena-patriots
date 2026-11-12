@@ -16,6 +16,8 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ["APP_ENV"] = "test"
 os.environ["ADMIN_SUBJECTS"] = "admin-1,admin-2"
 os.environ["STORAGE_BACKEND"] = "local"
+os.environ["CATALOG_CACHE_SECONDS"] = "0"  # las pruebas de caché lo activan explícitamente
+os.environ["GOOGLE_CLIENT_ID"] = "pokearena-test.apps.googleusercontent.com"
 os.environ["STORAGE_LOCAL_PATH"] = tempfile.mkdtemp(prefix="pokearena-img-")
 
 import pytest  # noqa: E402
@@ -52,6 +54,8 @@ def clean_state(database: None) -> Iterator[None]:
         conn.execute(text("DELETE FROM cards"))
         conn.execute(text("DELETE FROM abilities WHERE code <> 'HAB-000'"))
         conn.execute(text("TRUNCATE locations"))
+        conn.execute(text("TRUNCATE player_wallets, collection_cards, cube_movements"))
+        conn.execute(text("TRUNCATE player_identities, players"))
         conn.execute(text("UPDATE card_code_counters SET last_value = 0"))
     Redis.from_url(os.environ["REDIS_URL"]).flushdb()
     yield
@@ -147,3 +151,77 @@ def insert_ability(
                 "ev": evolution_target,
             },
         )
+
+
+ABBR = {
+    "FUEGO": "FUE",
+    "AGUA": "AGU",
+    "PLANTA": "PLA",
+    "ELECTRICO": "ELE",
+    "PSIQUICO": "PSI",
+    "LUCHA": "LUC",
+}
+
+
+def seed_cards(cards: list[dict[str, object]]) -> list[str]:
+    """Inserta cartas directo en la base para preparar escenarios. Devuelve sus códigos."""
+    codes = []
+    with get_engine().begin() as conn:
+        for card in cards:
+            seq = conn.execute(
+                text(
+                    "UPDATE card_code_counters SET last_value = last_value + 1 "
+                    "WHERE card_type = :t RETURNING last_value"
+                ),
+                {"t": card["type"]},
+            ).scalar_one()
+            code = f"PKA-{ABBR[str(card['type'])]}-{seq:03d}"
+            conn.execute(
+                text(
+                    "INSERT INTO cards (code, seq, name, cost, power, type, rarity, "
+                    "ability_code, image_key, thumb_key, image_status) VALUES (:code, :seq, "
+                    ":name, :cost, :power, :type, :rarity, :ability, :image, 'x_small.webp', "
+                    ":status)"
+                ),
+                {
+                    "code": code,
+                    "seq": seq,
+                    "ability": card.get("ability", "HAB-000"),
+                    "image": card.get("image", "x.png"),
+                    "status": card.get("status", "READY"),
+                    **{k: card[k] for k in ("name", "cost", "power", "type", "rarity")},
+                },
+            )
+            codes.append(code)
+    return codes
+
+
+TYPES = list(ABBR)
+
+
+def seed_commons(count: int, **overrides: object) -> list[str]:
+    """``count`` cartas Comunes visibles, repartidas entre los seis tipos."""
+    return seed_cards(
+        [
+            {
+                "name": f"Común {i}",
+                "cost": i % 11,
+                "power": i % 7,
+                "type": TYPES[i % len(TYPES)],
+                "rarity": "COMUN",
+                **overrides,
+            }
+            for i in range(count)
+        ]
+    )
+
+
+def login_as(client: TestClient, subject: str) -> dict:
+    """Inicia sesión como usuario de prueba y devuelve la respuesta completa."""
+    resp = client.post("/v1/dev/tokens", json={"subject": subject})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def bearer(session: dict) -> dict[str, str]:
+    return {"Authorization": f"Bearer {session['access_token']}"}

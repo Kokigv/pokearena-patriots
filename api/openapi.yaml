@@ -5,11 +5,14 @@ info:
   description: |
     Contrato de la API de PokéArena (RNF-API-01: se escribe y revisa antes del código).
     Sprint 1: identidad de prueba, Crear carta (US 119), Buscar carta (US 120) y Crear ubicación (US 122).
+    Sprint 2: Inicio de sesión con proveedor (US 116), Recibir colección inicial (US 123) y
+    Explorar el catálogo y mi colección (US 124).
 
     **Errores.** Todas las respuestas de error usan `application/problem+json` (RFC 9457) con
     tipos propios del dominio: `unauthenticated` y `token-expired` (401), `forbidden` (403),
     `not-found` (404), `request-in-progress` (409), `validation-error`, `ability-not-found` e
-    `idempotency-key-reused` (422).
+    `idempotency-key-reused` (422), `invalid-provider-token` (401) e
+    `identity-provider-unavailable` (503).
 
     **Idempotencia.** Las operaciones de creación exigen el encabezado `Idempotency-Key`
     (un UUID generado por el cliente). Reenviar la misma solicitud con la misma llave devuelve la
@@ -23,16 +26,55 @@ tags:
   - name: Identidad
   - name: Desarrollo (no existe en producción)
   - name: Catálogo
+  - name: Colección
   - name: Imágenes
 
 paths:
+  /v1/auth/google:
+    post:
+      tags: [Identidad]
+      summary: Iniciar sesión con Google (US 116)
+      description: |
+        Valida el ID token de Google **una sola vez** (firma con las llaves públicas de Google,
+        emisor, audiencia = `GOOGLE_CLIENT_ID` y expiración) y entrega una credencial propia de
+        PokéArena con expiración corta. Todas las demás solicitudes se autorizan con esa
+        credencial, nunca con el token de Google (RNF-SEG-01).
+
+        - Primer ingreso: crea la cuenta (rol jugador, Elo 0) y entrega la colección inicial
+          (US 123). La cuenta se asocia al identificador de Google, no al correo.
+        - Ingresos posteriores: reutiliza la cuenta; nunca crea una segunda.
+        - Token inválido, expirado, con firma inválida o de otra aplicación: `401
+          invalid-provider-token`, sin crear cuenta.
+        - Google no disponible: `503 identity-provider-unavailable`, sin crear cuenta.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_token]
+              properties:
+                id_token: { type: string, description: ID token (credential) de Google Identity Services }
+      responses:
+        "200":
+          description: Sesión iniciada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "503": { $ref: "#/components/responses/ProviderUnavailable" }
+
   /v1/dev/tokens:
     post:
       tags: [Desarrollo (no existe en producción)]
-      summary: Crear una sesión de usuario de prueba
+      summary: Crear una sesión de usuario de prueba (US 118)
       description: |
-        Solo existe con `APP_ENV` distinto de `production` (RNF-SEG-10). El rol de administrador
-        se asigna por configuración (`ADMIN_SUBJECTS`), no en este endpoint.
+        Solo existe con `APP_ENV` distinto de `production` (RNF-SEG-10). Sigue el mismo flujo que
+        el inicio de sesión con Google (cuenta, colección inicial y el mismo formato de
+        credencial); la cuenta queda marcada con `is_test`. El rol de administrador se asigna por
+        configuración (`ADMIN_SUBJECTS`), no en este endpoint.
       security: []
       requestBody:
         required: true
@@ -48,13 +90,13 @@ paths:
           description: Credencial de acceso emitida por PokéArena
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Token" }
+              schema: { $ref: "#/components/schemas/Session" }
         "422": { $ref: "#/components/responses/ValidationError" }
 
   /v1/me:
     get:
       tags: [Identidad]
-      summary: Identidad y roles de quien llama
+      summary: Identidad, roles y cuenta de quien llama
       responses:
         "200":
           description: Identidad
@@ -62,10 +104,51 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [subject, roles]
+                required: [subject, roles, player]
                 properties:
-                  subject: { type: string }
+                  subject: { type: string, description: Id de la cuenta del jugador }
                   roles: { type: array, items: { type: string, enum: [player, admin] } }
+                  player: { $ref: "#/components/schemas/Player" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/catalog:
+    get:
+      tags: [Colección]
+      summary: Explorar el catálogo y mi colección (US 124)
+      description: |
+        Catálogo paginado (cursor) de las cartas visibles para jugadores. Cada carta indica si
+        el jugador la posee y cuántas copias tiene. Los filtros por tipo y costo se combinan;
+        `owned=true` muestra solo las cartas propias. Una combinación sin resultados devuelve
+        una lista vacía. Las páginas del catálogo se guardan en caché unos segundos, así que una
+        carta recién creada puede tardar en aparecer.
+      parameters:
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/CardType" } }
+        - { name: cost, in: query, schema: { type: integer, minimum: 0, maximum: 10 } }
+        - { name: cost_min, in: query, schema: { type: integer, minimum: 0, maximum: 10 } }
+        - { name: cost_max, in: query, schema: { type: integer, minimum: 0, maximum: 10 } }
+        - { name: owned, in: query, schema: { type: boolean, default: false } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Página del catálogo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogPage" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /v1/me/collection:
+    get:
+      tags: [Colección]
+      summary: Mi colección y saldo de cubos (US 123)
+      responses:
+        "200":
+          description: Colección del jugador
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Collection" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
 
   /v1/abilities:
@@ -315,6 +398,11 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+    ProviderUnavailable:
+      description: El proveedor de identidad no responde (`identity-provider-unavailable`)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
     ValidationError:
       description: Datos inválidos; `errors` indica cada campo y el requisito incumplido
       content:
@@ -347,6 +435,90 @@ components:
         access_token: { type: string }
         token_type: { type: string, example: Bearer }
         expires_in: { type: integer, example: 900 }
+
+    Player:
+      type: object
+      required: [id, display_name, role, elo, is_test]
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string }
+        email: { type: [string, "null"] }
+        role: { type: string, enum: [player, admin] }
+        elo: { type: integer, example: 0 }
+        is_test: { type: boolean }
+
+    Session:
+      type: object
+      required: [access_token, token_type, expires_in, player, first_login, onboarding]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, example: 900 }
+        player: { $ref: "#/components/schemas/Player" }
+        first_login: { type: boolean }
+        onboarding:
+          type: object
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [COMPLETED, PENDING_CATALOG, PENDING_RETRY]
+              description: |
+                `PENDING_CATALOG`: aún no hay 15 cartas Comunes; `PENDING_RETRY`: la entrega
+                falló sin dejar nada a medias. En ambos casos se completa en un próximo ingreso.
+            message: { type: [string, "null"] }
+
+    CatalogCard:
+      type: object
+      required: [code, name, cost, power, type, rarity, image_url, owned, copies]
+      properties:
+        code: { type: string, example: PKA-ELE-001 }
+        name: { type: string }
+        cost: { type: integer }
+        power: { type: integer }
+        type: { $ref: "#/components/schemas/CardType" }
+        rarity: { $ref: "#/components/schemas/Rarity" }
+        image_url: { type: string, description: Versión grande de la imagen }
+        ability:
+          type: [object, "null"]
+          properties:
+            code: { type: string }
+            name: { type: string }
+            trigger: { type: string }
+            effect: { type: string }
+        owned: { type: boolean }
+        copies: { type: integer, minimum: 0 }
+
+    CatalogPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CatalogCard" } }
+        next_cursor: { type: [string, "null"] }
+
+    Collection:
+      type: object
+      required: [initial_granted, cubes, distinct_cards, cards, cube_movements]
+      properties:
+        initial_granted: { type: boolean }
+        cubes: { type: integer, example: 1000 }
+        distinct_cards: { type: integer, example: 15 }
+        cards:
+          type: array
+          items:
+            type: object
+            properties:
+              card_code: { type: string }
+              copies: { type: integer }
+        cube_movements:
+          type: array
+          items:
+            type: object
+            properties:
+              amount: { type: integer, example: 1000 }
+              reason: { type: string, example: INITIAL_GRANT }
+              balance_after: { type: integer }
+              created_at: { type: string, format: date-time }
 
     CardType:
       type: string

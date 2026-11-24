@@ -27,6 +27,7 @@ tags:
   - name: Desarrollo (no existe en producción)
   - name: Catálogo
   - name: Colección
+  - name: Matchmaking
   - name: Imágenes
 
 paths:
@@ -70,6 +71,37 @@ paths:
         '200': {description: Deck solicitado}
         '401': {description: Sesión inválida}
         '404': {description: El jugador no tiene ese deck}
+  /v1/matches/search:
+    post:
+      tags: [Matchmaking]
+      summary: Iniciar la búsqueda de un rival en clasificatoria
+      description: |
+        Registra al jugador en la cola de emparejamiento con el deck indicado. Reenviar la
+        solicitud con el mismo deck devuelve la búsqueda en espera existente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deck_id]
+              properties:
+                deck_id: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Búsqueda registrada o búsqueda en espera ya existente
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [search_id, status]
+                properties:
+                  search_id: {type: string, format: uuid}
+                  status: {type: string, enum: [WAITING]}
+        '401': {description: Sesión inválida}
+        '404': {description: Deck inexistente o ajeno}
+        '409': {description: Partida activa o búsqueda en espera con otro deck}
+        '422': {description: Deck inválido o cubos insuficientes (mínimo 8)}
   /v1/auth/google:
     post:
       tags: [Identidad]

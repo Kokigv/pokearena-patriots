@@ -10,6 +10,7 @@ from pokearena.catalog.api.router import router as catalog_router
 from pokearena.collection.api.onboarding import onboarding_factory
 from pokearena.collection.api.router import router as collection_router
 from pokearena.gameplay.api.router import router as gameplay_router
+from pokearena.gameplay.api.search import router as search_router
 from pokearena.identity.api.dependencies import ONBOARDING_FACTORY
 from pokearena.identity.api.router import auth_router, dev_router, me_router
 from pokearena.shared import http
@@ -42,6 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(me_router)
     app.include_router(collection_router)
     app.include_router(gameplay_router)
+    app.include_router(search_router)
     app.include_router(catalog_router)
     app.include_router(images_router)
     # RNF-SEG-10: el mecanismo de usuarios de prueba no existe en producción.

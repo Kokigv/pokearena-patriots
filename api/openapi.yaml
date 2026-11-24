@@ -14,7 +14,7 @@ info:
     `idempotency-key-reused` (422), `invalid-provider-token` (401) e
     `identity-provider-unavailable` (503).
 
-    **Idempotencia.** Las operaciones de creación exigen el encabezado `Idempotency-Key`
+    **Idempotencia.** Las operaciones de creación del catálogo exigen el encabezado `Idempotency-Key`
     (un UUID generado por el cliente). Reenviar la misma solicitud con la misma llave devuelve la
     respuesta original con `Idempotent-Replayed: true` y no crea otro registro.
 servers:
@@ -30,6 +30,46 @@ tags:
   - name: Imágenes
 
 paths:
+  /v1/me/decks:
+    get:
+      summary: Listar los decks del jugador autenticado
+      responses:
+        '200': {description: Lista de decks propios}
+        '401': {description: Sesión inválida}
+    post:
+      summary: Crear un deck de 12 cartas distintas de la colección del jugador
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, card_codes]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 60}
+                card_codes: {type: array, minItems: 12, maxItems: 12, uniqueItems: true, items: {type: string}}
+      responses:
+        '201': {description: Deck creado o recuperado al reintentar}
+        '401': {description: Sesión inválida}
+        '409': {description: Conflicto de nombre o clave}
+        '422': {description: Nombre o selección de cartas inválidos}
+  /v1/me/decks/{deck_id}:
+    get:
+      summary: Consultar un deck propio
+      parameters:
+        - in: path
+          name: deck_id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {description: Deck solicitado}
+        '401': {description: Sesión inválida}
+        '404': {description: El jugador no tiene ese deck}
   /v1/auth/google:
     post:
       tags: [Identidad]

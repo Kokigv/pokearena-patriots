@@ -259,3 +259,20 @@ form.panel {
   border: none;
   border-top: 1px solid #ddd;
 }
+
+.deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+.deck-card {
+  padding: 10px;
+  border: 1px solid #999;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.deck-card--chosen {
+  border-color: #168043;
+  outline: 2px solid #168043;
+}

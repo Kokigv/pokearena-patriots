@@ -5,8 +5,9 @@ import { CardSearch } from "./components/CardSearch";
 import { CatalogExplorer } from "./components/CatalogExplorer";
 import { LocationForm } from "./components/LocationForm";
 import { Login } from "./components/Login";
+import { DeckBuilder } from "./components/DeckBuilder";
 
-const PLAYER_TABS = { catalog: "Catálogo y mi colección" } as const;
+const PLAYER_TABS = { catalog: "Catálogo y mi colección", decks: "Mis decks" } as const;
 const ADMIN_TABS = {
   card: "Crear carta",
   location: "Crear ubicación",
@@ -73,6 +74,7 @@ export function App() {
       <main>
         {notice && <div className="banner banner--error">{notice}</div>}
         {tab === "catalog" && <CatalogExplorer />}
+        {tab === "decks" && <DeckBuilder />}
         {tab === "card" && isAdmin && <CardForm />}
         {tab === "location" && isAdmin && <LocationForm />}
         {tab === "search" && isAdmin && <CardSearch />}

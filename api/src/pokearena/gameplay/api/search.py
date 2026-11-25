@@ -64,6 +64,12 @@ def start_search(
     if _active_game(session, player):
         session.rollback()
         raise HTTPException(409, "Ya tiene una partida activa")
+    session.execute(
+        text("""UPDATE match_searches SET status='EXPIRED'
+            WHERE player_id=:p AND status='WAITING'
+            AND last_seen_at < now() - interval '5 minutes'"""),
+        {"p": player},
+    )
     active = (
         session.execute(
             text(
@@ -143,6 +149,7 @@ def candidate_for(session: Session, search: dict, player_elo: int) -> dict | Non
         session.execute(
             text("""SELECT s.*,p.elo FROM match_searches s
         JOIN players p ON p.id=s.player_id WHERE s.status='WAITING'
+        AND s.last_seen_at >= now() - interval '5 minutes'
         AND s.player_id <> :player AND abs(p.elo - :elo) <= :window
         ORDER BY s.created_at LIMIT 1 FOR UPDATE OF s SKIP LOCKED"""),
             {"player": search["player_id"], "elo": player_elo, "window": window},
@@ -207,11 +214,11 @@ def cancel_search(
         session.rollback()
         raise HTTPException(409, f"Partida encontrada: {row['match_id']}")
     if row["status"] == "WAITING":
+        elapsed = (datetime.now(UTC) - row["last_seen_at"]).total_seconds()
+        row["status"] = "EXPIRED" if elapsed > 300 else "CANCELLED"
         session.execute(
-            text("UPDATE match_searches SET status='CANCELLED' WHERE id=:i"), {"i": sid}
+            text("UPDATE match_searches SET status=:status WHERE id=:i"),
+            {"i": sid, "status": row["status"]},
         )
     session.commit()
-    return {
-        "search_id": sid,
-        "status": "CANCELLED" if row["status"] == "WAITING" else row["status"],
-    }
+    return {"search_id": sid, "status": row["status"]}

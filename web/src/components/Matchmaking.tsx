@@ -23,25 +23,30 @@ export function Matchmaking() {
 
     let running = true;
 
+    let timer: number;
     const poll = async () => {
       try {
         const state = await gameplay.status(searchId);
 
         if (running) {
-          setSearch(state);
+          setSearch((current) =>
+            current?.search_id === searchId && current.status === "WAITING" ? state : current,
+          );
         }
       } catch (e) {
         if (running) {
           setMessage((e as Error).message);
         }
+      } finally {
+        if (running) timer = window.setTimeout(poll, 3000);
       }
     };
 
-    const timer = window.setInterval(poll, 3000);
+    timer = window.setTimeout(poll, 3000);
 
     return () => {
       running = false;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
   }, [searchId, searchStatus]);
   const begin = async () => {

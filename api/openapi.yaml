@@ -97,11 +97,53 @@ paths:
                 required: [search_id, status]
                 properties:
                   search_id: {type: string, format: uuid}
-                  status: {type: string, enum: [WAITING]}
+                  status: {type: string, enum: [WAITING, MATCHED]}
+                  match_id: {type: string, format: uuid}
         '401': {description: Sesión inválida}
         '404': {description: Deck inexistente o ajeno}
         '409': {description: Partida activa o búsqueda en espera con otro deck}
         '422': {description: Deck inválido o cubos insuficientes (mínimo 8)}
+  /v1/matches/search/{search_id}:
+    get:
+      tags: [Matchmaking]
+      summary: Consultar el estado de una búsqueda propia
+      parameters: [{name: search_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Estado de la búsqueda
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [search_id, status]
+                properties:
+                  search_id: {type: string, format: uuid}
+                  status: {type: string, enum: [WAITING, MATCHED, EXPIRED, CANCELLED]}
+                  match_id: {type: [string, 'null'], format: uuid}
+                  bot_available: {type: boolean}
+        '401': {description: Sesión inválida}
+        '404': {description: Búsqueda ajena o inexistente}
+        '422': {description: Identificador inválido}
+  /v1/matches/search/{search_id}/cancel:
+    post:
+      tags: [Matchmaking]
+      summary: Cancelar una búsqueda propia
+      parameters: [{name: search_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Estado de la búsqueda
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [search_id, status]
+                properties:
+                  search_id: {type: string, format: uuid}
+                  status: {type: string, enum: [CANCELLED, EXPIRED]}
+        '401': {description: Sesión inválida}
+        '404': {description: Búsqueda ajena o inexistente}
+        '422': {description: Identificador inválido}
+        '409': {description: Partida ya encontrada}
   /v1/matches/{match_id}:
     get:
       tags: [Partidas]

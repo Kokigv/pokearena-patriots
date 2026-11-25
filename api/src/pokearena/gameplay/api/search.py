@@ -100,6 +100,7 @@ def start_search(
         .mappings()
         .one()
     )
+    own = dict(own)
     own_elo = session.execute(
         text("SELECT elo FROM players WHERE id=:p"), {"p": player}
     ).scalar_one()
@@ -135,7 +136,8 @@ def candidate_for(session: Session, search: dict, player_elo: int) -> dict | Non
     now = datetime.now(UTC)
     wait = max(0, (now - search["created_at"]).total_seconds())
     window = elo_window(wait)
-    return (
+
+    candidate = (
         session.execute(
             text("""SELECT s.*,p.elo FROM match_searches s
         JOIN players p ON p.id=s.player_id WHERE s.status='WAITING'
@@ -146,6 +148,8 @@ def candidate_for(session: Session, search: dict, player_elo: int) -> dict | Non
         .mappings()
         .first()
     )
+
+    return dict(candidate) if candidate is not None else None
 
 
 def _owned_search(session: Session, player: str, sid: str, lock: bool = False) -> dict:

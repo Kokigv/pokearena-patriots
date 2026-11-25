@@ -23,10 +23,18 @@ export function DeckBuilder() {
     setDecks(await api.decks());
   };
 
-  useEffect(() => { refresh().catch((e: Error) => setMessage(e.message)); }, []);
+  useEffect(() => {
+    refresh().catch((e: Error) => setMessage(e.message));
+  }, []);
 
   const toggle = (code: string) => {
-    setChosen((prev) => prev.includes(code) ? prev.filter((c) => c !== code) : prev.length < 12 ? [...prev, code] : prev);
+    setChosen((prev) =>
+      prev.includes(code)
+        ? prev.filter((c) => c !== code)
+        : prev.length < 12
+          ? [...prev, code]
+          : prev,
+    );
   };
   const save = async () => {
     try {
@@ -35,19 +43,47 @@ export function DeckBuilder() {
       setName("");
       setMessage("Deck guardado correctamente");
       await refresh();
-    } catch (e) { setMessage((e as Error).message); }
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
   };
 
-  return <section>
-    <h2>Mis decks</h2>
-    {decks.length === 0 ? <p>Aún no tenés decks.</p> : <ul>{decks.map((d) => <li key={d.id}>{d.name} · {d.card_codes.length} cartas</li>)}</ul>}
-    <h3>Crear Deck ({chosen.length}/12 cartas distintas)</h3>
-    <label>Nombre del deck <input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></label>
-    <div className="deck-grid">{cards.map((c) => <button key={c.code} type="button"
-      aria-pressed={chosen.includes(c.code)}
-      className={chosen.includes(c.code) ? "deck-card deck-card--chosen" : "deck-card"}
-      onClick={() => toggle(c.code)}>{c.name} ({c.code})</button>)}</div>
-    <button type="button" disabled={chosen.length !== 12 || !name.trim()} onClick={save}>Guardar deck</button>
-    {message && <p role="status">{message}</p>}
-  </section>;
+  return (
+    <section>
+      <h2>Mis decks</h2>
+      {decks.length === 0 ? (
+        <p>Aún no tenés decks.</p>
+      ) : (
+        <ul>
+          {decks.map((d) => (
+            <li key={d.id}>
+              {d.name} · {d.card_codes.length} cartas
+            </li>
+          ))}
+        </ul>
+      )}
+      <h3>Crear Deck ({chosen.length}/12 cartas distintas)</h3>
+      <label>
+        Nombre del deck{" "}
+        <input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <div className="deck-grid">
+        {cards.map((c) => (
+          <button
+            key={c.code}
+            type="button"
+            aria-pressed={chosen.includes(c.code)}
+            className={chosen.includes(c.code) ? "deck-card deck-card--chosen" : "deck-card"}
+            onClick={() => toggle(c.code)}
+          >
+            {c.name} ({c.code})
+          </button>
+        ))}
+      </div>
+      <button type="button" disabled={chosen.length !== 12 || !name.trim()} onClick={save}>
+        Guardar deck
+      </button>
+      {message && <p role="status">{message}</p>}
+    </section>
+  );
 }

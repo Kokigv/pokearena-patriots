@@ -189,7 +189,12 @@ export const api = {
   myCollection: () => request<Collection>("/v1/me/collection"),
   abilities: () => request<Ability[]>("/v1/abilities"),
   decks: () => request<Deck[]>("/v1/me/decks"),
-  createDeck: (data: {name: string; card_codes: string[]}) => request<Deck>("/v1/me/decks", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data)}),
+  createDeck: (data: { name: string; card_codes: string[] }) =>
+    request<Deck>("/v1/me/decks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
   createCard: (form: FormData, idempotencyKey: string) =>
     request<Card>("/v1/cards", {
       method: "POST",
@@ -207,13 +212,34 @@ export const api = {
     }),
 };
 
-export interface Deck { id: string; name: string; card_codes: string[] }
-export interface MatchSearch { search_id: string; status: string; match_id?: string | null; bot_available?: boolean }
+export interface Deck {
+  id: string;
+  name: string;
+  card_codes: string[];
+}
+export interface MatchSearch {
+  search_id: string;
+  status: string;
+  match_id?: string | null;
+  bot_available?: boolean;
+}
 export const gameplay = {
   decks: () => request<Deck[]>("/v1/me/decks"),
-  createDeck: (data: {name: string; card_codes: string[]}) => request<Deck>("/v1/me/decks", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data)}),
-  startSearch: (deck_id: string) => request<MatchSearch>("/v1/matches/search", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({deck_id})}),
+  createDeck: (data: { name: string; card_codes: string[] }) =>
+    request<Deck>("/v1/me/decks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  startSearch: (deck_id: string) =>
+    request<MatchSearch>("/v1/matches/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deck_id }),
+    }),
   status: (id: string) => request<MatchSearch>(`/v1/matches/search/${id}`),
-  cancel: (id: string) => request<MatchSearch>(`/v1/matches/search/${id}/cancel`, {method: "POST"}),
-  acceptBot: (id: string) => request<MatchSearch>(`/v1/matches/search/${id}/bot`, {method: "POST"}),
+  cancel: (id: string) =>
+    request<MatchSearch>(`/v1/matches/search/${id}/cancel`, { method: "POST" }),
+  acceptBot: (id: string) =>
+    request<MatchSearch>(`/v1/matches/search/${id}/bot`, { method: "POST" }),
 };

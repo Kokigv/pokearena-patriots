@@ -64,6 +64,12 @@ def start_search(
     if _active_game(session, player):
         session.rollback()
         raise HTTPException(409, "Ya tiene una partida activa")
+    session.execute(
+        text("""UPDATE match_searches SET status='EXPIRED'
+            WHERE player_id=:p AND status='WAITING'
+            AND last_seen_at < now() - interval '5 minutes'"""),
+        {"p": player},
+    )
     active = (
         session.execute(
             text(
@@ -96,7 +102,10 @@ def start_search(
         {"i": sid, "p": player, "d": str(payload.deck_id)},
     )
     own = dict(
-        session.execute(text("SELECT * FROM match_searches WHERE id=:i FOR UPDATE"), {"i": sid})
+        session.execute(
+            text("SELECT * FROM match_searches WHERE id=:i FOR UPDATE"),
+            {"i": sid},
+        )
         .mappings()
         .one()
     )
@@ -119,7 +128,8 @@ def start_search(
             session.execute(
                 text(
                     "INSERT INTO match_searches(id,player_id,deck_id,mode,status) "
-                    "VALUES(:i,:p,:d,'RANKED','WAITING') ON CONFLICT (id) DO NOTHING"
+                    "VALUES(:i,:p,:d,'RANKED','WAITING') "
+                    "ON CONFLICT (id) DO NOTHING"
                 ),
                 {"i": sid, "p": player, "d": str(payload.deck_id)},
             )
@@ -134,20 +144,81 @@ def candidate_for(session: Session, search: dict, player_elo: int) -> dict | Non
     now = datetime.now(UTC)
     wait = max(0, (now - search["created_at"]).total_seconds())
     window = elo_window(wait)
-    row = (
+
+    candidate = (
         session.execute(
-            text(
-                """SELECT s.*,p.elo FROM match_searches s
-                JOIN players p ON p.id=s.player_id
-                WHERE s.status='WAITING'
-                AND s.player_id <> :player
-                AND abs(p.elo - :elo) <= :window
-                ORDER BY s.created_at
-                LIMIT 1 FOR UPDATE OF s SKIP LOCKED"""
-            ),
+            text("""SELECT s.*,p.elo FROM match_searches s
+        JOIN players p ON p.id=s.player_id WHERE s.status='WAITING'
+        AND s.last_seen_at >= now() - interval '5 minutes'
+        AND s.player_id <> :player AND abs(p.elo - :elo) <= :window
+        ORDER BY s.created_at LIMIT 1 FOR UPDATE OF s SKIP LOCKED"""),
             {"player": search["player_id"], "elo": player_elo, "window": window},
         )
         .mappings()
         .first()
     )
-    return dict(row) if row is not None else None
+
+    return dict(candidate) if candidate is not None else None
+
+
+def _owned_search(session: Session, player: str, sid: str, lock: bool = False) -> dict:
+    query = "SELECT * FROM match_searches WHERE id=:i AND player_id=:p"
+    if lock:
+        query += " FOR UPDATE"
+    row = session.execute(text(query), {"i": sid, "p": player}).mappings().first()
+    if row is None:
+        raise HTTPException(404, "Búsqueda inexistente o ajena")
+    return dict(row)
+
+
+@router.get("/matches/search/{search_id}")
+def search_status(
+    search_id: uuid.UUID,
+    principal: Principal = Depends(current_principal),
+    session: Session = Depends(get_session),
+) -> dict:
+    sid = str(search_id)
+    row = _owned_search(session, principal.subject, sid, lock=True)
+    now = datetime.now(UTC)
+    if row["status"] == "WAITING":
+        # Timeout por ausencia de consultas. Se usa un plazo definido (5 minutos).
+        if (now - row["last_seen_at"]).total_seconds() > 300:
+            session.execute(
+                text("UPDATE match_searches SET status='EXPIRED' WHERE id=:i AND status='WAITING'"),
+                {"i": sid},
+            )
+            row["status"] = "EXPIRED"
+        else:
+            session.execute(
+                text("UPDATE match_searches SET last_seen_at=now() WHERE id=:i"), {"i": sid}
+            )
+    session.commit()
+    offered = row["status"] == "WAITING" and (now - row["created_at"]).total_seconds() >= 60
+    return {
+        "search_id": sid,
+        "status": row["status"],
+        "match_id": str(row["match_id"]) if row["match_id"] else None,
+        "bot_available": offered,
+    }
+
+
+@router.post("/matches/search/{search_id}/cancel")
+def cancel_search(
+    search_id: uuid.UUID,
+    principal: Principal = Depends(current_principal),
+    session: Session = Depends(get_session),
+) -> dict:
+    sid = str(search_id)
+    row = _owned_search(session, principal.subject, sid, lock=True)
+    if row["status"] == "MATCHED":
+        session.rollback()
+        raise HTTPException(409, f"Partida encontrada: {row['match_id']}")
+    if row["status"] == "WAITING":
+        elapsed = (datetime.now(UTC) - row["last_seen_at"]).total_seconds()
+        row["status"] = "EXPIRED" if elapsed > 300 else "CANCELLED"
+        session.execute(
+            text("UPDATE match_searches SET status=:status WHERE id=:i"),
+            {"i": sid, "status": row["status"]},
+        )
+    session.commit()
+    return {"search_id": sid, "status": row["status"]}

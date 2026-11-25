@@ -8,7 +8,11 @@ import { Login } from "./components/Login";
 import { DeckBuilder } from "./components/DeckBuilder";
 import { Matchmaking } from "./components/Matchmaking";
 
-const PLAYER_TABS = { catalog: "Catálogo y mi colección", decks: "Mis decks", matchmaking: "Buscar partida" } as const;
+const PLAYER_TABS = {
+  catalog: "Catálogo y mi colección",
+  decks: "Mis decks",
+  matchmaking: "Buscar partida",
+} as const;
 const ADMIN_TABS = {
   card: "Crear carta",
   location: "Crear ubicación",

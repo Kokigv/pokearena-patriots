@@ -102,6 +102,14 @@ paths:
         '404': {description: Deck inexistente o ajeno}
         '409': {description: Partida activa o búsqueda en espera con otro deck}
         '422': {description: Deck inválido o cubos insuficientes (mínimo 8)}
+  /v1/matches/{match_id}:
+    get:
+      tags: [Partidas]
+      summary: Estado inicial de la partida con privacidad entre jugadores (US 129)
+      parameters: [{name: match_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        "200": { description: Estado de la partida visible al jugador }
+        "404": { description: Partida ajena o inexistente }
   /v1/auth/google:
     post:
       tags: [Identidad]

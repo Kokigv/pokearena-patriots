@@ -95,12 +95,14 @@ def start_search(
         ),
         {"i": sid, "p": player, "d": str(payload.deck_id)},
     )
-    own = (
-        session.execute(text("SELECT * FROM match_searches WHERE id=:i FOR UPDATE"), {"i": sid})
+    own = dict(
+        session.execute(
+            text("SELECT * FROM match_searches WHERE id=:i FOR UPDATE"),
+            {"i": sid},
+        )
         .mappings()
         .one()
     )
-    own = dict(own)
     own_elo = session.execute(
         text("SELECT elo FROM players WHERE id=:p"), {"p": player}
     ).scalar_one()

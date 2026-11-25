@@ -222,3 +222,39 @@ def cancel_search(
         )
     session.commit()
     return {"search_id": sid, "status": row["status"]}
+
+
+@router.post("/matches/search/{search_id}/bot")
+def accept_bot(
+    search_id: uuid.UUID,
+    principal: Principal = Depends(current_principal),
+    session: Session = Depends(get_session),
+) -> dict:
+    sid = str(search_id)
+    row = _owned_search(session, principal.subject, sid, lock=True)
+    if row["status"] == "MATCHED":
+        session.rollback()
+        return {"search_id": sid, "status": "MATCHED", "match_id": str(row["match_id"])}
+    if row["status"] != "WAITING":
+        session.rollback()
+        raise HTTPException(409, "La búsqueda ya no está abierta")
+    if (datetime.now(UTC) - row["created_at"]).total_seconds() < 60:
+        session.rollback()
+        raise HTTPException(409, "La opción de bot se habilita después de 60 segundos")
+    if _active_game(session, principal.subject):
+        session.rollback()
+        raise HTTPException(409, "Ya existe una partida activa")
+    try:
+        mid = create_game(session, row)
+        session.execute(
+            text("UPDATE match_searches SET status='MATCHED',match_id=:m WHERE id=:i"),
+            {"m": mid, "i": sid},
+        )
+        session.commit()
+        return {"search_id": sid, "status": "MATCHED", "match_id": mid}
+    except RuleViolation as exc:
+        session.rollback()
+        raise HTTPException(409, str(exc)) from exc
+    except Exception:
+        session.rollback()
+        raise

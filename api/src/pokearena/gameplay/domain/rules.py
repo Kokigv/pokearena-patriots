@@ -38,14 +38,9 @@ def prepare_state(
         candidates = [v for v in valid if int(v["card_limit"]) > 0]
         if len(candidates) < 2:
             raise RuleViolation("Se necesitan al menos dos ubicaciones que permitan cartas")
-        selected = (
-            rng.sample(candidates, 2)
-            + [v for v in selected if v["id"] not in {x["id"] for x in candidates[:0]}][:1]
-        )
-        # El tercer lugar debe ser distinto.
-        selected = selected[:2] + [
-            next(v for v in valid if v["id"] not in {x["id"] for x in selected[:2]})
-        ]
+        first_two = rng.sample(candidates, 2)
+        third = rng.choice([v for v in valid if v["id"] not in {x["id"] for x in first_two}])
+        selected = first_two + [third]
     one = list(deck_one)
     rng.shuffle(one)
     two = list(deck_two) if deck_two is not None else list(deck_one)

@@ -54,6 +54,7 @@ def clean_state(database: None) -> Iterator[None]:
         conn.execute(text("DELETE FROM cards"))
         conn.execute(text("DELETE FROM abilities WHERE code <> 'HAB-000'"))
         conn.execute(text("TRUNCATE locations"))
+        conn.execute(text("TRUNCATE game_matches, match_searches, player_decks"))
         conn.execute(text("TRUNCATE player_wallets, collection_cards, cube_movements"))
         conn.execute(text("TRUNCATE player_identities, players"))
         conn.execute(text("UPDATE card_code_counters SET last_value = 0"))

@@ -7,6 +7,7 @@ info:
     Sprint 1: identidad de prueba, Crear carta (US 119), Buscar carta (US 120) y Crear ubicación (US 122).
     Sprint 2: Inicio de sesión con proveedor (US 116), Recibir colección inicial (US 123) y
     Explorar el catálogo y mi colección (US 124).
+    Sprint 3: Crear Deck (125), Buscar Partida (127), Consultar/cancelar (128), Iniciar (129).
 
     **Errores.** Todas las respuestas de error usan `application/problem+json` (RFC 9457) con
     tipos propios del dominio: `unauthenticated` y `token-expired` (401), `forbidden` (403),
@@ -144,6 +145,14 @@ paths:
         '404': {description: Búsqueda ajena o inexistente}
         '422': {description: Identificador inválido}
         '409': {description: Partida ya encontrada}
+  /v1/matches/search/{search_id}/bot:
+    post:
+      tags: [Matchmaking]
+      summary: Aceptar oferta de bot después de 60 segundos
+      parameters: [{name: search_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        "200": { description: Partida con bot creada }
+        "409": { description: Oferta no disponible }
   /v1/matches/{match_id}:
     get:
       tags: [Partidas]

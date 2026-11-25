@@ -65,3 +65,27 @@ def test_hand_size_never_exceeds_seven():
         state = turn_start(state, 1)
     assert len(state["hand_one"]) == 7
     assert state["energy"] == 7
+
+
+def test_draw_does_not_exceed_deck_and_protected_placements():
+    cards = [f"C{i}" for i in range(12)]
+    places = [
+        {
+            "id": str(i),
+            "card_limit": 1 if i < 2 else 0,
+            "image_status": "READY",
+            "assignable_to_matches": True,
+        }
+        for i in range(6)
+    ]
+    state = prepare_state(cards, None, places, 92)
+    assert len(set(state["locations"])) == 3
+    assert (
+        sum(
+            int(next(p["card_limit"] for p in places if p["id"] == loc)) > 0
+            for loc in state["locations"]
+        )
+        >= 2
+    )
+    assert len(state["deck_order_one"]) == 12
+    assert set(state["hand_one"]).isdisjoint(set(state["draw_pile_one"]))
